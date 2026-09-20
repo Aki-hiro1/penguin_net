@@ -8,6 +8,7 @@ import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 from datetime import datetime
+from sklearn.model_selection import GroupKFold
 
 # 路径设置
 project_root = Path(__file__).parent.parent
@@ -38,15 +39,14 @@ class Config:
 
     # 训练参数
     BATCH_SIZE = 8
-    EPOCHS = 20
+    EPOCHS = 5
     LEARNING_RATE = 1e-4
     WEIGHT_DECAY = 1e-4
     NUM_WORKERS = 4
 
     # 数据划分
-    TRAIN_RATIO = 0.7
-    VAL_RATIO = 0.15
-    TEST_RATIO = 0.15
+    N_FOLDS = 5          # GroupKFold 的 fold 数
+    VAL_RATIO = 0.2      # 从训练集中再切出验证集的比例
 
     # 损失函数
     IGNORE_INDEX = 2
@@ -109,40 +109,79 @@ def save_checkpoint(state, filename):
 
 
 def create_data_loaders(patches, config):
-    """创建数据加载器"""
-    n = len(patches)
-    indices = np.random.permutation(n)
+    """
+    按场景（scene_id）划分数据，保证同一 shp 来源的图幅
+    不会同时出现在训练和验证/测试中。
+    """
+    groups = np.array([p['scene_id'] for p in patches])
+    unique_scenes = np.unique(groups)
 
-    train_end = int(n * config.TRAIN_RATIO)
-    val_end = int(n * (config.TRAIN_RATIO + config.VAL_RATIO))
+    print(f"总图幅数: {len(patches)}")
+    print(f"不同场景数: {len(unique_scenes)}")
+    print(f"场景列表: {unique_scenes.tolist()}")
 
-    train_indices = indices[:train_end]
-    val_indices = indices[train_end:val_end]
-    test_indices = indices[val_end:]
+    n_splits = min(config.N_FOLDS, len(unique_scenes))
+    if n_splits < 2:
+        raise ValueError(f"场景数不足（{len(unique_scenes)}），无法划分训练/验证/测试")
 
-    print(
-        f"数据集划分: Train={len(train_indices)}, Val={len(val_indices)}, Test={len(test_indices)}")
+    gkf = GroupKFold(n_splits=n_splits)
+
+    # 取第一个 fold 作为 训练+验证 / 测试 的划分
+    fold_list = list(gkf.split(patches, groups=groups))
+    train_val_idx, test_idx = fold_list[0]
+
+    # 从 train_val 中再切出验证集
+    train_val_groups = groups[train_val_idx]
+    n_train_val_scenes = len(np.unique(train_val_groups))
+
+    if n_train_val_scenes >= 2:
+        n_inner = min(3, n_train_val_scenes)
+        gkf_inner = GroupKFold(n_splits=n_inner)
+        inner_list = list(gkf_inner.split(
+            train_val_idx, groups=train_val_groups))
+        train_inner, val_inner = inner_list[0]
+        train_idx = train_val_idx[train_inner]
+        val_idx = train_val_idx[val_inner]
+    else:
+        # 场景太少，无法再切验证集，用测试集当验证集
+        train_idx = train_val_idx
+        val_idx = test_idx
+
+    train_scenes = set(patches[i]['scene_id'] for i in train_idx)
+    val_scenes = set(patches[i]['scene_id'] for i in val_idx)
+    test_scenes = set(patches[i]['scene_id'] for i in test_idx)
+
+    print(f"\n数据集划分:")
+    print(f"  训练集: {len(train_idx)} 图幅, 场景: {sorted(train_scenes)}")
+    print(f"  验证集: {len(val_idx)} 图幅, 场景: {sorted(val_scenes)}")
+    print(f"  测试集: {len(test_idx)} 图幅, 场景: {sorted(test_scenes)}")
+
+    # 检查场景无重叠
+    assert len(train_scenes & val_scenes) == 0, "训练集和验证集有场景重叠"
+    assert len(train_scenes & test_scenes) == 0, "训练集和测试集有场景重叠"
+    assert len(val_scenes & test_scenes) == 0, "验证集和测试集有场景重叠"
+    print("  场景无重叠检查通过")
 
     # 训练集开启增强，验证集和测试集不增强
     train_dataset = ImgIdxDataset(
         patches=patches,
         patch_size=config.PATCH_SIZE,
         augment=True,
-        subset_indices=train_indices
+        subset_indices=train_idx
     )
 
     val_dataset = ImgIdxDataset(
         patches=patches,
         patch_size=config.PATCH_SIZE,
         augment=False,
-        subset_indices=val_indices
+        subset_indices=val_idx
     )
 
     test_dataset = ImgIdxDataset(
         patches=patches,
         patch_size=config.PATCH_SIZE,
         augment=False,
-        subset_indices=test_indices
+        subset_indices=test_idx
     )
 
     train_loader = DataLoader(

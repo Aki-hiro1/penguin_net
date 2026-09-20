@@ -11,7 +11,8 @@ sys.path.append(str(src_dir))
 
 try:
     from tools.file_tool import get_tif_path, load_image_by_projection
-    from models.unet_model import UNet  # 使用你的 UNet（双分支SE）
+    from models.unet_model import UNet
+    from models.se_unet_model import SE_UNet
     from tools.calculate_tool import indices_generate
 except ImportError as e:
     print(e)
@@ -126,7 +127,7 @@ def predict_tiled(
 def main():
     # ============ 配置 ============
     checkpoint_path = Path(
-        r".\checkpoints\best_model_20260907_010859.pth")  # 你的最佳模型
+        r".\checkpoints\best_model_20260920_114239.pth")  # 你的最佳模型
     # checkpoint_path = Path(r".\src\models\unet_fold_more_ch.pth")
 
     # 输入影像文件夹（包含6个波段TIF）
@@ -177,7 +178,7 @@ def main():
 
     # ============ 加载模型 ============
     print("加载模型...")
-    model = UNet(
+    model = SE_UNet(
         in_channels_a=IN_CHANNELS_A,
         in_channels_b=IN_CHANNELS_B,
         num_classes=NUM_CLASSES,
