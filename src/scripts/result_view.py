@@ -87,7 +87,7 @@ def normalize_band(band):
 
 def main():
     # ============ 配置 ============
-    checkpoint_path = Path(r".\checkpoints\best_model_20260920_103308.pth")
+    checkpoint_path = Path(r".\checkpoints\best_model_20260920_114239.pth")
     tif_folder = Path(r"d:\outputimg\2023_20")
 
     center_x = 511720
