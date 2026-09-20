@@ -1,0 +1,28 @@
+# config/context_manifest.yaml
+# 场景配对表：每个场景的影像文件夹 + 点标签路径
+
+scenes:
+  - id: "2018"
+    image_dir: ../img/2018
+    label_path: ../data/2018.shp
+    label_crs: "EPSG:32754"
+
+  - id: "2020_7_add"
+    image_dir: ../img/2020_7_add
+    label_path: ../data/2020_7_add.shp
+    label_crs: "EPSG:32754"
+
+  - id: "2022_15"
+    image_dir: ../img/2022_15
+    label_path: ../data/2022_15.shp
+    label_crs: "EPSG:32754"
+
+  - id: "2022_18"
+    image_dir: ../img/2022_18
+    label_path: ../data/2022_18.shp
+    label_crs: "EPSG:32754"
+
+  - id: "2023_21"
+    image_dir: ../img/2023_21
+    label_path: ../data/2023_21.shp
+    label_crs: "EPSG:32754"
